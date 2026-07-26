@@ -18,7 +18,10 @@ jobs:
     name: Analyze Go
     runs-on: ubuntu-latest
     permissions:
-      security-events: write   # required to upload findings
+      security-events: write   # upload findings
+      actions: read            # read workflow-run metadata; without this the
+                               # analysis succeeds and the upload fails with
+                               # "Resource not accessible by integration"
       contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
