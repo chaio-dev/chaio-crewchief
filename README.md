@@ -34,6 +34,10 @@ gone. Crew Chief relays; you decide.
 # macOS
 brew install ChadDahlgren/tap/chaio-crewchief
 
+# or tap once, then short names work for this and anything else I publish
+brew tap ChadDahlgren/tap
+brew install chaio-crewchief
+
 # Linux (or macOS without Homebrew) — verifies the published checksum
 curl -fsSL https://raw.githubusercontent.com/ChadDahlgren/chaio-crewchief/main/scripts/install.sh | sh
 
@@ -140,4 +144,20 @@ Anthropic. Keys live in the gateway's environment, never in config.
 
 Extracted from a working single-user deployment (a DGX Spark + Cloudflare +
 Anthropic fleet that classifies ~3,000 emails/day). APIs are small and
-stable; expect sharp edges in packaging. License: Apache-2.0.
+stable; expect sharp edges in packaging.
+
+Single maintainer, `0.x`, and honest about it: the HTTP API and config format
+may change between minor versions, and breaking changes are called out in the
+[changelog](CHANGELOG.md).
+
+## Contributing and reporting
+
+- [CONTRIBUTING.md](CONTRIBUTING.md) — how to build and test, and the one
+  design boundary worth reading before writing code
+- [SECURITY.md](SECURITY.md) — the threat model, and how to report a
+  vulnerability privately. **Read this before exposing the port**: there is no
+  authentication and the process holds your provider API keys.
+- [CHANGELOG.md](CHANGELOG.md)
+- [Code of Conduct](CODE_OF_CONDUCT.md)
+
+License: [Apache-2.0](LICENSE).

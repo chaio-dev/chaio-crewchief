@@ -1,5 +1,5 @@
 // Package engine relays delegation requests to model providers. It is
-// deliberately dumb: it does not judge output quality, does not choose which
+// deliberately simple: it does not judge output quality, does not choose which
 // model is "best" (routing.yaml is a data lookup, not a decision), and only
 // retries mechanical failures — no response, a timeout, or a transport/API
 // error. Whether an artifact is actually correct is the calling brain's job,

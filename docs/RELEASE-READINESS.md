@@ -54,7 +54,7 @@ is expensive and confusing. This project has already been renamed twice
 - [ ] **Rename the GitHub repo** from `crewchief` to `chaio-crewchief`, and
       rename the local working directory to match.
 - [ ] Update the GitHub repo description — it still reads **"Claude Foreman"**
-      (two renames ago). Suggested: *"A dumb, fast, cheap phonebook between
+      (two renames ago). Suggested: *"A deliberately simple, fast, cheap phonebook between
       your frontier model and a fleet of cheap ones — with a cost ledger."*
 - [ ] Add repo topics for discoverability: `llm`, `local-llm`, `mcp`,
       `claude-code`, `go`, `cloudflare-workers-ai`, `llama-cpp`.
