@@ -1,6 +1,6 @@
 # Crew Chief
 
-**Crew Chief is a dumb, fast, cheap phonebook between your frontier brain and a
+**Crew Chief is a deliberately simple, fast, cheap phonebook between your frontier brain and a
 fleet of models — local GPUs, Cloudflare Workers AI, Bedrock, any
 OpenAI-compatible endpoint.**
 
