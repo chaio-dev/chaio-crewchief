@@ -81,7 +81,7 @@ public history breaks every clone and fork. This is the last moment it's free.
 
 - [ ] **Back up the old history first**, so the provenance is recoverable:
   ```bash
-  cd "/Volumes/Envoy Pro/Master/Development"
+  cd <parent directory of your clone>
   git clone --mirror chaio-crewchief chaio-crewchief-history-backup.git
   ```
   Keep that bundle off the SSD too (it is small — ~180 KiB).
@@ -193,6 +193,14 @@ governance layer around it.
       has it. Good — just don't let it drift.
 - [ ] Consider requiring signed commits once you're the only committer; it's
       cheap to adopt now and painful to retrofit.
+- [ ] **Merge queue — revisit later, not now.** It solves concurrent merges
+      racing each other: two PRs each pass against `main`, both merge, and the
+      combination breaks. With one maintainer that doesn't happen, and the
+      ruleset's "branch must be up to date" already covers the same class at
+      this volume. A queue would add latency to every merge and extra CI runs
+      for no benefit. Adopt it when two or more people are merging on the same
+      day — and turn *off* strict up-to-date checks at that point, since the
+      queue does that job instead.
 
 ---
 
