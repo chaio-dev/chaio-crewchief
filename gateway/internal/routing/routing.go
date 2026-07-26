@@ -1,6 +1,6 @@
 // Package routing resolves a language hint to a preferred model name via a
 // plain data lookup (routing.yaml) — never inference. This is data the
-// operator/brain maintains (informed by bench/'s offline model grading);
+// operator/brain maintains (informed by chaio-bench's offline grading);
 // Crew Chief only ever reads it.
 package routing
 

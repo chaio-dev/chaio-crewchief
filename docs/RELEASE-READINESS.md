@@ -151,6 +151,13 @@ maintained, which is most of what makes a stranger willing to depend on it.
 - [ ] **`examples/`** already covers llama.cpp, Cloudflare, Bedrock, and
       Anthropic. Verify each one still works against the current binary before
       launch — stale examples are the fastest way to lose a new user.
+- [ ] **`chaio-bench` needs its own pass** before it goes public: it inherits
+      none of this repo's CI, and it still carries an unpatched
+      `@angular/core` advisory (no fix on the 19 line; npm's remedy is a jump
+      to 22, which would invalidate comparability with results already
+      recorded). Decide there whether to bump the Angular track or document
+      the exposure — it's a local, offline test harness with no server and no
+      untrusted input, so the advisory's attack surface isn't reachable.
 
 ---
 
@@ -349,10 +356,14 @@ Do not do this until Phases 1–4 are done and verified.
    find out. It may be that the honest pitch is "cheap high-volume
    classification with a cost ledger," which is a *better* product story than
    a weaker coding claim.
-2. **Does `bench/` ship in the same repo?** It's the tool that tells you what
-   belongs in `routing.yaml`, so it's coherent to include — but it's Python +
-   a Node test harness in an otherwise single-binary Go project, and it
-   complicates the "install and go" story. Consider a separate repo.
+2. ~~**Does `bench/` ship in the same repo?**~~ **Resolved 2026-07-25: split
+   out to [chaio-bench](https://github.com/ChadDahlgren/chaio-bench).** The
+   deciding evidence was concrete rather than aesthetic — enabling Dependabot
+   immediately surfaced two high-severity advisories, both in
+   `bench/web/package-lock.json`, neither reachable from the shipped Go
+   binary. A single-binary Go project was carrying a JavaScript dependency
+   surface it never used. The grader drives model endpoints directly and never
+   touches the gateway, so nothing was actually coupled except the directory.
 3. **Who is this for?** "People running a local GPU box who want their
    frontier model to delegate to it" is a small, real audience. Naming it
    plainly in the README will attract the right users and repel the wrong

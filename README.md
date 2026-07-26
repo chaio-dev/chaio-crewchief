@@ -64,9 +64,13 @@ network (a fleet box your laptop talks to) is `--addr :8181`, and it logs a
 warning to keep that choice deliberate. Don't put it on the open internet.
 
 Everything else in the repo is optional equipment: `plugin/` (Claude Code
-plugin: fleet agents + skills), `bench/` (an *offline* tool for grading
-candidate models before you add them to `routing.yaml` — decoupled from the
-live gateway), `examples/` (per-provider recipes).
+plugin: fleet agents + skills) and `examples/` (per-provider recipes).
+
+Model grading lives in its own repository:
+[chaio-bench](https://github.com/ChadDahlgren/chaio-bench) scores candidate models
+against a fixed Python/React/Angular suite so you can decide what belongs in
+`routing.yaml`. It's separate because it's Python and Node in service of a
+single Go binary, and because Crew Chief never grades anything at runtime.
 
 ## Delegate
 
@@ -88,7 +92,8 @@ no `solved`, no partial credit — Crew Chief doesn't know enough to offer one.
 **Routing:** pass `model` to name an exact preset, or `lang` to resolve via
 `routing.yaml` (a plain data lookup — see [`routing.yaml`](gateway/routing.yaml)),
 or omit both for the registry default. Crew Chief never infers which model
-is "best"; that table is something you maintain, informed by `bench/`.
+is "best"; that table is something you maintain, informed by
+[chaio-bench](https://github.com/ChadDahlgren/chaio-bench).
 
 **Retries:** `retries` (default 2) bounds *mechanical* retries only. Set
 `0` for single-shot. There is no other retry mode — Crew Chief doesn't
@@ -104,9 +109,10 @@ claude plugin install chaio-crewchief
 
 You get the `crewchief_*` MCP tools (via `chaio-crewchief mcp` — the binary must
 be on PATH), the `fleet-worker`/`fleet-heavy` agents, and the
-`/chaio-crewchief:status`, `/chaio-crewchief:delegate`, `/chaio-crewchief:usage`,
-`/chaio-crewchief:bench` skills. Set `CHAIO_CREWCHIEF_URL` if the gateway isn't on
-localhost (`DISPATCH_URL` is honored as a fallback for pre-rename configs).
+`/chaio-crewchief:status`, `/chaio-crewchief:delegate` and
+`/chaio-crewchief:usage` skills. Set `CHAIO_CREWCHIEF_URL` if the gateway isn't
+on localhost (`CREWCHIEF_URL` and `DISPATCH_URL` are honored as fallbacks for
+configs written under earlier names).
 
 ## Providers are presets, not integrations
 

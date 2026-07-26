@@ -47,8 +47,14 @@ Swapping `model` is the entire difference between $0-local and cloud-burst.
 Read the artifact yourself, same as exercise 2 — Crew Chief still isn't judging.
 
 ## 5. Score a new model (optional, ~10 min)
-> `/chaio-crewchief:bench` — smoke-run any preset: `python3 runner.py --models <preset> --smoke`
+> Separate tool, separate repository:
+> [chaio-bench](https://github.com/ChadDahlgren/chaio-bench)
+>
+> ```bash
+> git clone https://github.com/ChadDahlgren/chaio-bench && cd chaio-bench
+> python3 runner.py --models <preset> --smoke
+> ```
 
-This is a *separate, offline* exercise (see `bench/README.md`) — it doesn't
-touch the live gateway. It's how you'd decide whether a new model earns an
-entry in `routing.yaml`, informed by real graded results.
+This is a *separate, offline* exercise — it doesn't touch the live gateway and
+isn't part of this plugin. It's how you'd decide whether a new model earns an
+entry in `routing.yaml`, informed by real graded results rather than a guess.

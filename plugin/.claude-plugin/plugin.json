@@ -2,7 +2,7 @@
   "name": "chaio-crewchief",
   "displayName": "Hybrid Model Fleet",
   "version": "0.4.0",
-  "description": "Delegate coding work to the local fleet + Cloudflare model fleet through the Crew Chief gateway: fleet agents, MCP tools, status/bench skills, cost ledger.",
+  "description": "Delegate coding work to a local + cloud model fleet through the Chaio Crew Chief gateway: fleet agents, MCP tools, status/delegate/usage skills, cost ledger.",
   "author": {
     "name": "Chad Dahlgren",
     "email": "me@chad-dahlgren.com"

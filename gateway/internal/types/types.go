@@ -104,7 +104,7 @@ type Registry interface {
 // Router resolves a language hint to a preferred model name via routing.yaml
 // — a plain data lookup, never inference. Crew Chief only reads the table;
 // deciding what belongs in it is the operator's/brain's job (informed by
-// bench/, which grades candidate models offline).
+// chaio-bench, which grades candidate models offline).
 type Router interface {
 	// Resolve returns the preferred model name for lang, and false if
 	// there's no entry (caller falls back to the registry default).
