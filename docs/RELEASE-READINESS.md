@@ -229,16 +229,19 @@ native to them. Revisit npm only if you later ship a Node-side client.
       `com.apple.quarantine` — without it, an unsigned downloaded binary dies
       on first run with "the developer cannot be verified". **Casks are
       macOS-only**, which is why `install.sh` exists for Linux.
-- [ ] **Create the `ChadDahlgren/homebrew-tap` repo** (name must be exactly
-      that). GoReleaser writes `Casks/chaio-crewchief.rb` into it per release.
-- [ ] **Add the `HOMEBREW_TAP_TOKEN` secret** to this repo: a PAT with `repo`
-      scope on the tap. The default `GITHUB_TOKEN` is scoped to one repository
-      and cannot push the cask elsewhere — the release will fail without it.
-- [ ] **Configure a git remote.** The local clone has none, which is also why
-      the snapshot cask currently renders `https://github.com///releases/...`
-      — GoReleaser derives owner/repo from the remote. This resolves itself
-      once `origin` is set; verify the URL in the generated cask before
-      trusting the first real release.
+- [x] **`ChadDahlgren/homebrew-tap` created** — public (installing a tap
+      clones it, so a private tap can't be installed by anyone else) and named
+      exactly `homebrew-tap`, since Homebrew strips that prefix to produce
+      `brew install ChadDahlgren/tap/chaio-crewchief`. Has a README noting
+      that casks there are generated and direct edits get overwritten.
+- [x] **`HOMEBREW_TAP_TOKEN` secret added** — a fine-grained PAT scoped to the
+      tap repository only, Contents: Read and write, expiring **2027-07-25**.
+      Set a calendar reminder: expiry surfaces as an opaque permissions
+      failure during release, with nothing pointing at the token.
+- [x] **Git remote configured** over SSH, which also fixed the snapshot cask
+      rendering `https://github.com///releases/...` — GoReleaser derives
+      owner/repo from the remote. Regenerated and confirmed the download URLs
+      now resolve to `github.com/ChadDahlgren/chaio-crewchief/releases/...`.
 - [ ] **Sign and notarize the macOS binaries** eventually, so the quarantine
       workaround can be dropped. Needs an Apple Developer account; not a
       blocker for `v0.x`.

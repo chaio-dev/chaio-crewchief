@@ -78,9 +78,11 @@ homebrew_casks:
     repository:
       owner: ChadDahlgren
       name: homebrew-tap
-      # A PAT with repo scope on ChadDahlgren/homebrew-tap, stored as the
-      # HOMEBREW_TAP_TOKEN secret on this repo. The default GITHUB_TOKEN
-      # cannot write to another repository.
+      # A fine-grained PAT scoped to ChadDahlgren/homebrew-tap ONLY, with
+      # Contents: Read and write (Metadata: Read is added automatically).
+      # Nothing else — this token's whole job is committing one .rb file.
+      # Stored as the HOMEBREW_TAP_TOKEN secret on this repo; the default
+      # GITHUB_TOKEN is scoped to one repository and cannot write to the tap.
       token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
     directory: Casks
     homepage: "https://github.com/ChadDahlgren/chaio-crewchief"

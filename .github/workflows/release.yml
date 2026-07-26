@@ -35,6 +35,9 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # PAT with repo scope on ChadDahlgren/homebrew-tap. GITHUB_TOKEN is
-          # scoped to this repository and cannot push the cask elsewhere.
+          # Fine-grained PAT, ChadDahlgren/homebrew-tap only, Contents:write.
+          # GITHUB_TOKEN is scoped to this repository and cannot push the
+          # cask elsewhere. Expires 2027-07-25 — renewal failures surface as
+          # an opaque permissions error, so check this first if a release
+          # suddenly can't publish the cask.
           HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
