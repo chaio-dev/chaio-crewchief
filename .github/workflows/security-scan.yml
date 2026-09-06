@@ -293,11 +293,19 @@ jobs:
         continue-on-error: true
         run: |
           set -uo pipefail
+          # Reports go to RUNNER_TEMP, never the workspace. Writing them beside
+          # the checkout meant the summary's gosec-*.json glob also matched
+          # files committed by the pull request, so a PR could add an empty
+          # gosec-9.json to offset a module whose scan died and silence the
+          # incomplete-scan warning. Repository content cannot reach
+          # RUNNER_TEMP, so the count is trustworthy again.
+          mkdir -p "${RUNNER_TEMP}/gosec-reports"
           i=0
           while IFS= read -r -d "" d; do
             [ -z "$d" ] && continue
             echo "::group::gosec $d"
-            ( cd "$d" && gosec -quiet -fmt=json -out="${GITHUB_WORKSPACE}/gosec-${i}.json" ./... )
+            ( cd "$d" && gosec -quiet -fmt=json \
+                -out="${RUNNER_TEMP}/gosec-reports/gosec-${i}.json" ./... )
             echo "::endgroup::"
             i=$((i + 1))
           done < /tmp/go-modules.z
@@ -320,7 +328,10 @@ jobs:
           except OSError:
               pass
 
-          reports = sorted(glob.glob("gosec-*.json"))
+          # Only reports this run produced -- see the Run gosec step for why
+          # this must not glob the workspace.
+          report_dir = os.path.join(os.environ.get("RUNNER_TEMP", "/tmp"), "gosec-reports")
+          reports = sorted(glob.glob(os.path.join(report_dir, "gosec-*.json")))
           incomplete = bool(expected and len(reports) < expected)
           if incomplete:
               print(f"**Incomplete: {len(reports)} of {expected} Go module(s) produced a "
