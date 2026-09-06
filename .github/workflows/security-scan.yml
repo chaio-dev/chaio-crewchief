@@ -34,7 +34,9 @@ name: security-scan
 #               placeholders joined into a parameterised query.
 #
 # To promote a scanner to blocking once its backlog is clear, delete its
-# `continue-on-error: true`. That is the only edit required.
+# `continue-on-error: true`. semgrep is already passed `--error` so its exit
+# code reflects findings -- without that flag it exits 0 even with findings and
+# removing continue-on-error would do nothing at all.
 
 on:
   pull_request:
@@ -99,15 +101,21 @@ jobs:
         run: |
           python3 - <<'PY' >> "$GITHUB_STEP_SUMMARY"
           import json, os
-          rows = []
+          # A secret in a tracked file is found by BOTH scans -- once in the
+          # commit that introduced it and again in the checked-out tree. Keying
+          # on rule+path+line collapses those into one row so the count is the
+          # number of secrets, not the number of detections.
+          seen = {}
           for name, path in (("history", "gitleaks-history.json"), ("worktree", "gitleaks-tree.json")):
               if not os.path.exists(path):
                   continue
               try:
                   for f in json.load(open(path)) or []:
-                      rows.append((name, f.get("RuleID", "?"), f.get("File", "?"), f.get("StartLine", "?")))
+                      key = (f.get("RuleID", "?"), f.get("File", "?"), f.get("StartLine", "?"))
+                      seen.setdefault(key, []).append(name)
               except json.JSONDecodeError:
                   pass
+          rows = [("+".join(scopes), k[0], k[1], k[2]) for k, scopes in seen.items()]
           print("## Secrets (gitleaks)\n")
           if not rows:
               print("No secrets found in tracked history or the working tree.")
@@ -146,6 +154,7 @@ jobs:
             --config=p/secrets \
             --metrics=off \
             --quiet \
+            --error \
             --json \
             --output=semgrep.json \
             --exclude=node_modules \
@@ -195,37 +204,68 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Skips cleanly in the JS/TS/HCL repos this same file is deployed to,
-      # rather than needing a per-repo variant to maintain.
-      - name: Detect Go
+      # Finds go.mod anywhere, not just at the root. chaio-crewchief keeps its
+      # module in gateway/, and a root-only `[ -f go.mod ]` check made this job
+      # skip every step and still report SUCCESS -- a green check that scanned
+      # nothing, which is worse than a red one. Also skips cleanly in the
+      # JS/TS/HCL repos this same file is deployed to.
+      - name: Detect Go modules
         id: detect
         run: |
-          if [ -f go.mod ]; then echo "go=true" >> "$GITHUB_OUTPUT"; else echo "go=false" >> "$GITHUB_OUTPUT"; fi
+          set -euo pipefail
+          DIRS=$(find . -name go.mod -not -path '*/vendor/*' -not -path '*/node_modules/*' \
+                   -exec dirname {} \; | sort -u)
+          if [ -z "$DIRS" ]; then
+            echo "go=false" >> "$GITHUB_OUTPUT"
+            echo "No go.mod found; skipping gosec." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          echo "go=true" >> "$GITHUB_OUTPUT"
+          echo "first=$(echo "$DIRS" | head -1)" >> "$GITHUB_OUTPUT"
+          { echo 'dirs<<EOF'; echo "$DIRS"; echo 'EOF'; } >> "$GITHUB_OUTPUT"
+          echo "Go modules found:"; echo "$DIRS"
 
       - uses: actions/setup-go@v5
         if: steps.detect.outputs.go == 'true'
         with:
-          go-version-file: go.mod
+          go-version-file: ${{ steps.detect.outputs.first }}/go.mod
 
       - name: Install gosec
         if: steps.detect.outputs.go == 'true'
         run: go install "github.com/securego/gosec/v2/cmd/gosec@${GOSEC_VERSION}"
 
+      # One report per module, merged by the summary step. gosec cannot span
+      # modules in a single invocation.
       - name: Run gosec
         if: steps.detect.outputs.go == 'true'
         continue-on-error: true
-        run: gosec -quiet -fmt=json -out=gosec.json ./...
+        run: |
+          set -uo pipefail
+          i=0
+          while IFS= read -r d; do
+            [ -z "$d" ] && continue
+            echo "::group::gosec $d"
+            ( cd "$d" && gosec -quiet -fmt=json -out="${GITHUB_WORKSPACE}/gosec-${i}.json" ./... )
+            echo "::endgroup::"
+            i=$((i + 1))
+          done <<< "${{ steps.detect.outputs.dirs }}"
 
       - name: Summarise
         if: always() && steps.detect.outputs.go == 'true'
         run: |
           python3 - <<'PY' >> "$GITHUB_STEP_SUMMARY"
-          import json, os, collections
+          import json, os, glob, collections
           print("## Go security (gosec)\n")
-          if not os.path.exists("gosec.json"):
+          reports = sorted(glob.glob("gosec-*.json"))
+          if not reports:
               print("gosec produced no report -- check the step above.")
               raise SystemExit(0)
-          issues = json.load(open("gosec.json")).get("Issues") or []
+          issues = []
+          for r in reports:
+              try:
+                  issues.extend(json.load(open(r)).get("Issues") or [])
+              except (json.JSONDecodeError, OSError):
+                  pass
           if not issues:
               print("No issues.")
               raise SystemExit(0)
