@@ -308,7 +308,24 @@ jobs:
           python3 - <<'PY' >> "$GITHUB_STEP_SUMMARY"
           import json, os, glob, collections
           print("## Go security (gosec)\n")
+          # How many modules were supposed to be scanned. A gosec invocation
+          # that dies before writing its numbered report leaves no file at all,
+          # so globbing the reports that DO exist cannot notice the gap --
+          # counting them against the module list is what catches it. Without
+          # this, two clean reports out of three render as "No issues."
+          expected = 0
+          try:
+              with open("/tmp/go-modules.z", "rb") as f:
+                  expected = len([d for d in f.read().split(b"\0") if d])
+          except OSError:
+              pass
+
           reports = sorted(glob.glob("gosec-*.json"))
+          incomplete = bool(expected and len(reports) < expected)
+          if incomplete:
+              print(f"**Incomplete: {len(reports)} of {expected} Go module(s) produced a "
+                    f"report. {expected - len(reports)} gosec run(s) failed before writing "
+                    f"one, so those modules were NOT scanned.**\n")
           if not reports:
               print("gosec produced no report -- check the step above. "
                     "This is NOT a clean result.")
@@ -328,8 +345,8 @@ jobs:
                     f"could not be read -- {', '.join(unreadable)}. The findings below, "
                     f"if any, are PARTIAL.**\n")
           if not issues:
-              print("No issues in the reports that parsed."
-                    if unreadable else "No issues.")
+              print("No issues." if not (unreadable or incomplete)
+                    else "No issues in the modules that were actually scanned.")
               raise SystemExit(0)
           print(f"{len(issues)} issue(s). gosec is advisory here and historically "
                 f"noisy on this codebase -- confirm before acting.\n")
