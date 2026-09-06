@@ -250,7 +250,7 @@ jobs:
           # containing a newline would otherwise split into two bogus entries,
           # and one containing a line reading `EOF` would close the heredoc
           # early and let the rest be parsed as further step outputs. Only the
-          # fixed literals go=/first= are written to GITHUB_OUTPUT.
+          # fixed literal go= is written to GITHUB_OUTPUT.
           # GNU find only (-printf). The runner is always ubuntu-latest, so this
           # is guaranteed; failing loudly beats a fallback that quietly
           # mis-splits a path and under-reports coverage.
@@ -262,16 +262,19 @@ jobs:
             exit 0
           fi
           echo "go=true" >> "$GITHUB_OUTPUT"
-          FIRST=$(tr '\0' '\n' < /tmp/go-modules.z | head -1)
-          # go-version-file is an action input, not shell, so this cannot become
-          # syntax; a hostile value can only make setup-go fail to find a file.
-          echo "first=$FIRST" >> "$GITHUB_OUTPUT"
           echo "Go modules found:"; tr '\0' '\n' < /tmp/go-modules.z
 
+      # A pinned toolchain rather than go-version-file. Deriving the file path
+      # meant passing a repository-controlled directory name to the action, and
+      # squeezing it through a newline-delimited `head -1` truncated any path
+      # containing a newline -- which made setup-go fail and took gosec with it
+      # before a single file was scanned. gosec analyses source, so the exact
+      # patch release is irrelevant to an advisory scan; "stable" removes the
+      # untrusted input from the job entirely.
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         if: steps.detect.outputs.go == 'true'
         with:
-          go-version-file: ${{ steps.detect.outputs.first }}/go.mod
+          go-version: stable
 
       - name: Install gosec
         if: steps.detect.outputs.go == 'true'
@@ -307,16 +310,26 @@ jobs:
           print("## Go security (gosec)\n")
           reports = sorted(glob.glob("gosec-*.json"))
           if not reports:
-              print("gosec produced no report -- check the step above.")
+              print("gosec produced no report -- check the step above. "
+                    "This is NOT a clean result.")
               raise SystemExit(0)
-          issues = []
+          # A report that cannot be parsed is an UNKNOWN result, not a clean
+          # one. Swallowing the parse error and then printing "No issues."
+          # turns a broken advisory scan into a green all-clear, which is the
+          # single most misleading thing this summary could do.
+          issues, unreadable = [], []
           for r in reports:
               try:
                   issues.extend(json.load(open(r)).get("Issues") or [])
-              except (json.JSONDecodeError, OSError):
-                  pass
+              except (json.JSONDecodeError, OSError) as e:
+                  unreadable.append(f"{r} ({type(e).__name__})")
+          if unreadable:
+              print(f"**Incomplete: {len(unreadable)} of {len(reports)} gosec report(s) "
+                    f"could not be read -- {', '.join(unreadable)}. The findings below, "
+                    f"if any, are PARTIAL.**\n")
           if not issues:
-              print("No issues.")
+              print("No issues in the reports that parsed."
+                    if unreadable else "No issues.")
               raise SystemExit(0)
           print(f"{len(issues)} issue(s). gosec is advisory here and historically "
                 f"noisy on this codebase -- confirm before acting.\n")
