@@ -1,0 +1,239 @@
+name: security-scan
+
+# Free replacement for GitHub Advanced Security, which was disabled across the
+# org on 2026-09-06. GHAS cost $49/mo for a single committer and produced 43
+# CodeQL alerts that were all dated to the day it was switched on and never
+# triaged, plus zero secret-scanning alerts in its entire life. These three
+# scanners are open source, run on Actions minutes the Enterprise plan already
+# includes, and report into the PR job summary -- where the work is -- instead
+# of a Security tab nobody opened.
+#
+# Why no SARIF upload: github/codeql-action/upload-sarif writes to the Security
+# tab, and that endpoint requires Advanced Security on a private repo. That is
+# precisely what we turned off, so results go to $GITHUB_STEP_SUMMARY instead.
+#
+# Why ubuntu-latest and not the GX10 self-hosted runners: an enterprise runner
+# group is a two-level grant, and inside the org each group's "Repository
+# access" defaults to none. Half the repos this workflow lands in were never
+# granted access, and a job pointed at a group it cannot reach queues forever
+# with no error rather than failing. Hosted minutes are already covered by the
+# plan's included allowance, so there is nothing to save by risking that.
+#
+# Enforcement is split on purpose, based on what each scanner actually found at
+# rollout:
+#   gitleaks -- BLOCKING. Zero findings in the tracked history of every repo, so
+#               it can only ever fire on something genuinely new, and a
+#               committed credential is the one result worth stopping a merge
+#               for.
+#   semgrep  -- advisory. 48 findings on `chaio` at rollout (31 of them mutable
+#               action tags). Blocking would have meant a red build on day one
+#               and a deleted workflow by day two.
+#   gosec    -- advisory. 30 findings on `chaio-ai` at rollout; every HIGH was
+#               reviewed and every one was a false positive -- G101 matching env
+#               var NAMES like "CHAIO_MCP_TOKEN", and G202 matching a run of `?`
+#               placeholders joined into a parameterised query.
+#
+# To promote a scanner to blocking once its backlog is clear, delete its
+# `continue-on-error: true`. That is the only edit required.
+
+on:
+  pull_request:
+  push:
+    branches: [main, master]
+  schedule:
+    # Weekly. Rules ship upstream continuously, so a repo that stops receiving
+    # commits should still get re-checked against them.
+    - cron: '17 9 * * 1'
+  workflow_dispatch:
+
+# Least privilege: every job here only ever reads the tree.
+permissions:
+  contents: read
+
+env:
+  GITLEAKS_VERSION: '8.30.1'
+  SEMGREP_VERSION: '1.176.1'
+  GOSEC_VERSION: 'v2.29.0'
+
+jobs:
+  secrets:
+    name: secrets (gitleaks)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history. A credential that was committed and then "removed" in
+          # a later commit is still in the pack, still fetchable, and still
+          # needs rotating -- fetch-depth 1 would report the repo clean.
+          fetch-depth: 0
+
+      # The gitleaks binary directly, NOT gitleaks/gitleaks-action. That action
+      # requires a GITLEAKS_LICENSE key for any repo owned by an organisation
+      # and fails without one. The binary it wraps is MIT and unrestricted.
+      - name: Install gitleaks
+        run: |
+          set -euo pipefail
+          curl -fsSL -o /tmp/gitleaks.tar.gz \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          tar -xzf /tmp/gitleaks.tar.gz -C /tmp gitleaks
+          sudo install -m 0755 /tmp/gitleaks /usr/local/bin/gitleaks
+          gitleaks version
+
+      - name: Scan committed history
+        run: |
+          set -euo pipefail
+          gitleaks git . --no-banner --redact \
+            --report-format json --report-path gitleaks-history.json
+
+      - name: Scan working tree
+        run: |
+          set -euo pipefail
+          gitleaks dir . --no-banner --redact \
+            --report-format json --report-path gitleaks-tree.json
+
+      # Runs even on failure so the summary explains a red build rather than
+      # making someone read raw job logs to find out what leaked.
+      - name: Summarise
+        if: always()
+        run: |
+          python3 - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import json, os
+          rows = []
+          for name, path in (("history", "gitleaks-history.json"), ("worktree", "gitleaks-tree.json")):
+              if not os.path.exists(path):
+                  continue
+              try:
+                  for f in json.load(open(path)) or []:
+                      rows.append((name, f.get("RuleID", "?"), f.get("File", "?"), f.get("StartLine", "?")))
+              except json.JSONDecodeError:
+                  pass
+          print("## Secrets (gitleaks)\n")
+          if not rows:
+              print("No secrets found in tracked history or the working tree.")
+          else:
+              print(f"**{len(rows)} potential secret(s). Treat every one as live and rotate it "
+                    f"before deciding it was a false positive.**\n")
+              print("| Scope | Rule | Location |")
+              print("|---|---|---|")
+              for scope, rule, path, line in rows:
+                  print(f"| {scope} | `{rule}` | `{path}:{line}` |")
+          PY
+
+  sast:
+    name: static analysis (semgrep)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install semgrep
+        run: pip install --disable-pip-version-check "semgrep==${SEMGREP_VERSION}"
+
+      # --metrics=off keeps findings on the runner; the default posts anonymised
+      # rule-hit telemetry to semgrep.dev. p/default and p/secrets are the OSS
+      # rule packs and need no account.
+      - name: Run semgrep
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          semgrep \
+            --config=p/default \
+            --config=p/secrets \
+            --metrics=off \
+            --quiet \
+            --json \
+            --output=semgrep.json \
+            --exclude=node_modules \
+            --exclude=dist \
+            --exclude=build \
+            --exclude=vendor \
+            --exclude=.worktrees \
+            .
+
+      - name: Summarise
+        if: always()
+        run: |
+          python3 - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import json, os, collections
+          print("## Static analysis (semgrep)\n")
+          if not os.path.exists("semgrep.json"):
+              print("semgrep produced no report -- check the step above.")
+              raise SystemExit(0)
+          results = json.load(open("semgrep.json")).get("results", [])
+          if not results:
+              print("No findings.")
+              raise SystemExit(0)
+          by_sev = collections.Counter(r["extra"].get("severity", "?") for r in results)
+          print(f"{len(results)} finding(s): " +
+                ", ".join(f"{n} {s}" for s, n in sorted(by_sev.items())) + "\n")
+          errors = [r for r in results if r["extra"].get("severity") == "ERROR"]
+          if errors:
+              print("### ERROR severity\n")
+              print("| Rule | Location |")
+              print("|---|---|")
+              for r in errors:
+                  rule = r["check_id"].split(".")[-1]
+                  print(f"| `{rule}` | `{r['path']}:{r['start']['line']}` |")
+              print()
+          counts = collections.Counter(r["check_id"].split(".")[-1] for r in results)
+          print("### All rules hit\n")
+          print("| Count | Rule |")
+          print("|---|---|")
+          for rule, n in counts.most_common():
+              print(f"| {n} | `{rule}` |")
+          PY
+
+  gosec:
+    name: go security (gosec)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      # Skips cleanly in the JS/TS/HCL repos this same file is deployed to,
+      # rather than needing a per-repo variant to maintain.
+      - name: Detect Go
+        id: detect
+        run: |
+          if [ -f go.mod ]; then echo "go=true" >> "$GITHUB_OUTPUT"; else echo "go=false" >> "$GITHUB_OUTPUT"; fi
+
+      - uses: actions/setup-go@v5
+        if: steps.detect.outputs.go == 'true'
+        with:
+          go-version-file: go.mod
+
+      - name: Install gosec
+        if: steps.detect.outputs.go == 'true'
+        run: go install "github.com/securego/gosec/v2/cmd/gosec@${GOSEC_VERSION}"
+
+      - name: Run gosec
+        if: steps.detect.outputs.go == 'true'
+        continue-on-error: true
+        run: gosec -quiet -fmt=json -out=gosec.json ./...
+
+      - name: Summarise
+        if: always() && steps.detect.outputs.go == 'true'
+        run: |
+          python3 - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import json, os, collections
+          print("## Go security (gosec)\n")
+          if not os.path.exists("gosec.json"):
+              print("gosec produced no report -- check the step above.")
+              raise SystemExit(0)
+          issues = json.load(open("gosec.json")).get("Issues") or []
+          if not issues:
+              print("No issues.")
+              raise SystemExit(0)
+          print(f"{len(issues)} issue(s). gosec is advisory here and historically "
+                f"noisy on this codebase -- confirm before acting.\n")
+          counts = collections.Counter((i["severity"], i["rule_id"]) for i in issues)
+          print("| Count | Severity | Rule |")
+          print("|---|---|---|")
+          for (sev, rule), n in counts.most_common():
+              print(f"| {n} | {sev} | `{rule}` |")
+          PY
