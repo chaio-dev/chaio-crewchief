@@ -25,6 +25,11 @@ between minor versions. Breaking changes will always be called out here.
 - The `/health` probe now sends a preset's `headers`, so a gateway-routed
   preset no longer reports unhealthy while delegation works.
 
+### Security
+
+- Built with Go 1.26.6, which fixes GO-2026-6218 (net/url), GO-2026-6090
+  (crypto/tls) and GO-2026-6089 (net/http) in the standard library.
+
 ## [0.5.0] — 2026-07-26
 
 Makes the Claude Code plugin work on its own. Before this release
