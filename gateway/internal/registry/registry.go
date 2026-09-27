@@ -87,6 +87,13 @@ func (r *registryImpl) List() []types.Preset {
 
 func applyDefaults(p *types.Preset) {
 	p.BaseURL = os.ExpandEnv(p.BaseURL)
+	if len(p.Headers) > 0 {
+		expanded := make(map[string]string, len(p.Headers))
+		for k, v := range p.Headers {
+			expanded[k] = os.ExpandEnv(v)
+		}
+		p.Headers = expanded
+	}
 	if p.Temperature == 0 {
 		p.Temperature = 0.3
 	}

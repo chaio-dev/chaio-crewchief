@@ -97,6 +97,32 @@ models:
 	}
 }
 
+// Header values expand ${ENV} vars at load time, same as base_url — a gateway
+// preset's auth token lives in the environment, never in the committed YAML.
+func TestHeaderEnvExpansion(t *testing.T) {
+	t.Setenv("CREWCHIEF_TEST_TOKEN", "secret-value")
+	dir := t.TempDir()
+	p := writeYAML(t, dir, `
+models:
+  - name: a
+    base_url: http://a
+    headers:
+      cf-aig-authorization: "Bearer ${CREWCHIEF_TEST_TOKEN}"
+      cf-aig-gateway-id: chaio-build
+`)
+	reg, err := LoadRegistry(p)
+	if err != nil {
+		t.Fatalf("LoadRegistry: %v", err)
+	}
+	got, _ := reg.Get("a")
+	if got.Headers["cf-aig-authorization"] != "Bearer secret-value" {
+		t.Fatalf("cf-aig-authorization = %q", got.Headers["cf-aig-authorization"])
+	}
+	if got.Headers["cf-aig-gateway-id"] != "chaio-build" {
+		t.Fatalf("cf-aig-gateway-id = %q", got.Headers["cf-aig-gateway-id"])
+	}
+}
+
 func TestEmptyBaseURLErrors(t *testing.T) {
 	dir := t.TempDir()
 	p := writeYAML(t, dir, `
