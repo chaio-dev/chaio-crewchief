@@ -263,6 +263,12 @@ func New(eng Engine, store types.Store, reg types.Registry, arch types.Archiver,
 								req.Header.Set("Authorization", "Bearer "+key)
 							}
 						}
+						// A gateway preset with no api_key_env authenticates purely
+						// via Headers (e.g. cf-aig-authorization) — without this the
+						// probe would 401 even though delegation works fine.
+						for k, v := range p.Headers {
+							req.Header.Set(k, v)
+						}
 						resp, err := client.Do(req)
 						if err == nil {
 							_ = resp.Body.Close()
