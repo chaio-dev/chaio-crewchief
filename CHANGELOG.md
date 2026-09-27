@@ -10,6 +10,14 @@ between minor versions. Breaking changes will always be called out here.
 
 ## [Unreleased]
 
+### Added
+
+- `headers` on a preset: a map of extra HTTP headers sent with every request,
+  `${ENV}`-expanded like `base_url`. Lets a preset route through a request
+  gateway (auth token, routing/metadata tags) without `api_key_env`, for
+  providers whose real key never needs to leave the gateway (BYOK). See
+  [`examples/ai-gateway.md`](examples/ai-gateway.md).
+
 ## [0.5.0] — 2026-07-26
 
 Makes the Claude Code plugin work on its own. Before this release

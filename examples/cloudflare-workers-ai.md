@@ -6,3 +6,6 @@
    `api_key_env: CLOUDFLARE_API_TOKEN`, `health_path: /models/search`,
    `provider_class: cloud`.
 Free tier: 10,000 neurons/day. Pricing per model at developers.cloudflare.com/workers-ai/platform/pricing.
+
+Routing this through a request gateway instead (shared BYOK key, one
+cost/log view) is [`examples/ai-gateway.md`](ai-gateway.md).

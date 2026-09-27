@@ -118,6 +118,13 @@ type Preset struct {
 	TimeoutSec      int     `yaml:"timeout_sec" json:"timeout_sec"`
 	Default         bool    `yaml:"default" json:"default"`
 	ProviderClass   string  `yaml:"provider_class" json:"provider_class"` // local|cloud|frontier; default "local" when empty
+	// Headers are extra HTTP headers sent with every request to this preset,
+	// e.g. a gateway auth token or a routing/metadata tag the endpoint expects.
+	// ${ENV} vars in values are expanded at load, same as BaseURL. api_key_env
+	// is still the only source of the Authorization/Bearer header; a preset
+	// that authenticates entirely via a header here (e.g. a gateway that holds
+	// the real provider key itself) can simply omit api_key_env.
+	Headers map[string]string `yaml:"headers" json:"headers"`
 }
 
 type Registry interface {
