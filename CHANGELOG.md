@@ -10,6 +10,8 @@ between minor versions. Breaking changes will always be called out here.
 
 ## [Unreleased]
 
+## [0.7.0] — 2026-09-26
+
 ### Added
 
 - `headers` on a preset: a map of extra HTTP headers sent with every request,
@@ -17,6 +19,11 @@ between minor versions. Breaking changes will always be called out here.
   gateway (auth token, routing/metadata tags) without `api_key_env`, for
   providers whose real key never needs to leave the gateway (BYOK). See
   [`examples/ai-gateway.md`](examples/ai-gateway.md).
+
+### Fixed
+
+- The `/health` probe now sends a preset's `headers`, so a gateway-routed
+  preset no longer reports unhealthy while delegation works.
 
 ## [0.5.0] — 2026-07-26
 
