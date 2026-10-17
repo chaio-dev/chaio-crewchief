@@ -1,6 +1,6 @@
 module github.com/ChadDahlgren/chaio-crewchief/gateway
 
-go 1.26.6
+go 1.26.9
 
 require (
 	github.com/modelcontextprotocol/go-sdk v1.6.1
