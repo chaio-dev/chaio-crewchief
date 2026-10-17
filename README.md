@@ -1,5 +1,10 @@
 # Crew Chief
 
+> **GX10 fleet retired (2026-10-07, CHAIO-173).** The GX10 box that served the
+> local model fleet has been offboarded. Any `gx10` host in examples and tests
+> (for instance `http://gx10:8181`) is a historical placeholder, not a live
+> endpoint; point `CHAIO_CREWCHIEF_URL` at a gateway you actually run.
+
 **Crew Chief is a deliberately simple, fast, cheap phonebook between your frontier brain and a
 fleet of models — local GPUs, Cloudflare Workers AI, Bedrock, any
 OpenAI-compatible endpoint.**
@@ -227,9 +232,12 @@ good one.
 
 Any OpenAI-compatible endpoint is one YAML block in `models.yaml`: base_url
 (+ optional `model_id`, `api_key_env`, `health_path`, `omit_temperature` for
-Claude 4.6+). Working recipes in [`examples/`](examples/): llama.cpp,
-Cloudflare Workers AI, Amazon Bedrock (`bedrock-mantle` + API key),
-Anthropic. Keys live in the gateway's environment, never in config.
+Claude 4.6+, `headers` for anything that needs an extra header rather than a
+Bearer token — a request-routing gateway's own auth or tag). Working recipes
+in [`examples/`](examples/): llama.cpp, Cloudflare Workers AI, Amazon Bedrock
+(`bedrock-mantle` + API key), Anthropic, and putting any of the above behind
+an AI gateway (BYOK, shared logging/cost view) via `headers`. Keys live in
+the gateway's environment, never in config.
 
 ## Design notes
 

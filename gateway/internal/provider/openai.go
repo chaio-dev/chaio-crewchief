@@ -69,6 +69,12 @@ func (o *OpenAI) Complete(ctx context.Context, base types.Preset, req types.Comp
 		}
 		httpReq.Header.Set("Authorization", "Bearer "+key)
 	}
+	// Extra headers last, so a preset can override Content-Type/Authorization
+	// (e.g. a gateway that authenticates via its own header and holds the
+	// provider's real key itself, needing no Authorization from us at all).
+	for k, v := range base.Headers {
+		httpReq.Header.Set(k, v)
+	}
 
 	resp, err := o.client.Do(httpReq)
 	if err != nil {

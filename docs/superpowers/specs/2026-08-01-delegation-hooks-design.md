@@ -60,7 +60,9 @@ every Crew Chief user hits this on day one for the same structural reason. Shipp
 the hooks next to the `delegate` skill they enforce makes the plugin
 self-activating: install it and delegation actually happens.
 
-Declared in `plugin/hooks/hooks.json`, with `${CLAUDE_PLUGIN_ROOT}` resolving
+Declared in `plugin/hooks/hooks.json`, with `"${CLAUDE_PLUGIN_ROOT}"` -- quoted,
+because the hook command is executed by `/bin/sh` and an unquoted expansion
+splits on any space in the install path -- resolving
 script paths:
 
 ```json
@@ -69,13 +71,13 @@ script paths:
   "hooks": {
     "UserPromptSubmit": [
       { "hooks": [{ "type": "command",
-                    "command": "${CLAUDE_PLUGIN_ROOT}/hooks/policy-rail.sh",
+                    "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/policy-rail.sh",
                     "timeout": 5 }] }
     ],
     "PreToolUse": [
       { "matcher": "Write",
         "hooks": [{ "type": "command",
-                    "command": "${CLAUDE_PLUGIN_ROOT}/hooks/write-gate.sh",
+                    "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/write-gate.sh",
                     "timeout": 10 }] }
     ]
   }

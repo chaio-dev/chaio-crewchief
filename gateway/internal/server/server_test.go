@@ -190,6 +190,44 @@ func TestHealthAlwaysOK(t *testing.T) {
 	}
 }
 
+// A preset that authenticates purely via Headers (no api_key_env — the
+// gateway holds the real key) must have those headers sent on the health
+// probe too, or a working gateway preset shows up as unhealthy.
+func TestHealthSendsPresetHeaders(t *testing.T) {
+	var gotAuth string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuth = r.Header.Get("cf-aig-authorization")
+		if gotAuth == "" {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	reg := &fakeRegistry{presets: []types.Preset{{
+		Name:       "gw-preset",
+		BaseURL:    srv.URL,
+		HealthPath: "/health",
+		Headers:    map[string]string{"cf-aig-authorization": "Bearer gw-token"},
+	}}}
+	h := New(&fakeEngine{}, &fakeStore{}, reg, &fakeArchiver{}, nil)
+	req := httptest.NewRequest("GET", "/health", nil)
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+
+	if gotAuth != "Bearer gw-token" {
+		t.Fatalf("cf-aig-authorization = %q", gotAuth)
+	}
+	var resp map[string]interface{}
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	models := resp["models"].([]interface{})
+	m := models[0].(map[string]interface{})
+	if healthy, _ := m["healthy"].(bool); !healthy {
+		t.Fatalf("preset reported unhealthy: %+v", m)
+	}
+}
+
 func TestAsyncDelegateLifecycle(t *testing.T) {
 	release := make(chan struct{})
 	st := &fakeStore{requests: map[string]types.RequestRecord{}}
