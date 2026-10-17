@@ -1,5 +1,10 @@
 # Crew Chief
 
+> **GX10 fleet retired (2026-10-07, CHAIO-173).** The GX10 box that served the
+> local model fleet has been offboarded. Any `gx10` host in examples and tests
+> (for instance `http://gx10:8181`) is a historical placeholder, not a live
+> endpoint; point `CHAIO_CREWCHIEF_URL` at a gateway you actually run.
+
 **Crew Chief is a deliberately simple, fast, cheap phonebook between your frontier brain and a
 fleet of models — local GPUs, Cloudflare Workers AI, Bedrock, any
 OpenAI-compatible endpoint.**
