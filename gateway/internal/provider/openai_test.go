@@ -223,3 +223,60 @@ func TestCompleteZeroTimeoutDoesNotPanic(t *testing.T) {
 		t.Fatalf("Content = %q", resp.Content)
 	}
 }
+
+// A preset's headers map is sent on every request — used by gateway presets
+// that need a routing/auth header the base client doesn't set for them.
+func TestCompleteSendsPresetHeaders(t *testing.T) {
+	var gotAuth, gotMeta string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuth = r.Header.Get("cf-aig-authorization")
+		gotMeta = r.Header.Get("cf-aig-metadata")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"choices": []map[string]interface{}{{"message": map[string]interface{}{"content": "ok"}}},
+		})
+	}))
+	defer srv.Close()
+
+	o := New()
+	_, err := o.Complete(context.Background(), types.Preset{
+		BaseURL: srv.URL,
+		Headers: map[string]string{
+			"cf-aig-authorization": "Bearer gw-token",
+			"cf-aig-metadata":      `{"app":"crewchief","preset":"sonnet-5-ref"}`,
+		},
+	}, types.CompletionRequest{Timeout: 5 * time.Second})
+	if err != nil {
+		t.Fatalf("Complete: %v", err)
+	}
+	if gotAuth != "Bearer gw-token" {
+		t.Fatalf("cf-aig-authorization = %q", gotAuth)
+	}
+	if gotMeta != `{"app":"crewchief","preset":"sonnet-5-ref"}` {
+		t.Fatalf("cf-aig-metadata = %q", gotMeta)
+	}
+}
+
+// A preset with no api_key_env and only a Headers-based credential must not
+// send an Authorization header at all — the gateway holds the real key.
+func TestCompleteOmitsAuthorizationWhenNoAPIKeyEnv(t *testing.T) {
+	authSet := false
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, authSet = r.Header["Authorization"]
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"choices": []map[string]interface{}{{"message": map[string]interface{}{"content": "ok"}}},
+		})
+	}))
+	defer srv.Close()
+
+	o := New()
+	_, err := o.Complete(context.Background(), types.Preset{
+		BaseURL: srv.URL,
+		Headers: map[string]string{"cf-aig-authorization": "Bearer gw-token"},
+	}, types.CompletionRequest{Timeout: 5 * time.Second})
+	if err != nil {
+		t.Fatalf("Complete: %v", err)
+	}
+	if authSet {
+		t.Fatal("Authorization header should be unset")
+	}
+}
